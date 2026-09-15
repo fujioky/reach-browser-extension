@@ -20,11 +20,18 @@ A browser extension (Chrome / Edge / Firefox) for [Reach](https://github.com/fuj
 
 ## Requirements
 
-A Reach deployment with the extension API (`/api/extension/*`, see below) and its database migration (the `api_tokens` table).
+A Reach deployment with the extension API (`/api/extension/*`, see below; [fujioky/reach](https://github.com/fujioky/reach) main from 2026-09-15 on — the access password needs the commit that sets the mirror's password when sharing) and its database migration (the `api_tokens` table).
 
 ## Install
 
-The extension is not in the stores; build it yourself. Requires Node.js 22+.
+The extension is not in the stores. Download the zip for your browser from [Releases](https://github.com/fujioky/reach-browser-extension/releases/latest).
+
+- **Chrome / Edge:** download `reach-browser-extension-<version>-chrome.zip` and unzip it into a folder you keep. Open `chrome://extensions` (`edge://extensions`), turn on Developer mode, choose "Load unpacked" and select that folder. To upgrade, unzip the new version over the **same folder** and press reload on the extensions page — a different folder is a different extension to Chrome, and the sign-in and history stay behind.
+- **Firefox:** release Firefox only installs signed extensions. Submit `reach-browser-extension-<version>-firefox.zip` on [addons.mozilla.org](https://addons.mozilla.org/developers/) as "On your own" (unlisted) to have it signed. To just try it, pick that zip in `about:debugging` → "This Firefox" → "Load Temporary Add-on"; it is removed when the browser restarts.
+
+### Build from source
+
+Requires Node.js 22+.
 
 ```bash
 git clone https://github.com/fujioky/reach-browser-extension.git
@@ -34,8 +41,7 @@ npm run build            # Chrome / Edge → .output/chrome-mv3
 npm run build:firefox    # Firefox       → .output/firefox-mv3
 ```
 
-- **Chrome / Edge:** open `chrome://extensions` (`edge://extensions`), turn on Developer mode, choose "Load unpacked" and select `.output/chrome-mv3`.
-- **Firefox:** release Firefox only installs signed extensions. Run `npm run zip:firefox` and submit the zip on [addons.mozilla.org](https://addons.mozilla.org/developers/) as "On your own" (unlisted) to have it signed. To just try it, load `.output/firefox-mv3/manifest.json` from `about:debugging` → "This Firefox" → "Load Temporary Add-on"; it is removed when the browser restarts.
+Load it the same way: the `.output/chrome-mv3` folder in Chrome / Edge, `.output/firefox-mv3/manifest.json` as a temporary add-on in Firefox.
 
 ## Sign in
 
@@ -97,6 +103,8 @@ npm run typecheck
 npm run zip             # Chrome zip
 npm run zip:firefox     # Firefox zip + sources zip (required for AMO review)
 ```
+
+To release: bump `version` in `package.json` (it is the extension version), run `npm run zip && npm run zip:firefox`, and attach the chrome and firefox zips from `.output/` to the Release for that tag.
 
 ```
 entrypoints/

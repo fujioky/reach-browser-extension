@@ -20,11 +20,18 @@
 
 ## 前提
 
-需要 Reach 部署了扩展接口（`/api/extension/*`，见下文），并且跑过对应的数据库迁移（`api_tokens` 表）。
+需要部署了扩展接口的 Reach（`/api/extension/*`，见下文；[fujioky/reach](https://github.com/fujioky/reach) 2026-09-15 起的 main，访问密码需要其中「分享时设置镜像访问密码」这次提交），并且跑过对应的数据库迁移（`api_tokens` 表）。
 
 ## 安装
 
-扩展没有上架商店，需要自行构建。要求 Node.js 22+。
+扩展没有上架商店，到 [Releases](https://github.com/fujioky/reach-browser-extension/releases/latest) 下载对应浏览器的 zip。
+
+- **Chrome / Edge：** 下载 `reach-browser-extension-<版本>-chrome.zip` 并解压到一个固定的文件夹。打开 `chrome://extensions`（Edge 为 `edge://extensions`），打开「开发者模式」，点「加载已解压的扩展程序」，选择这个文件夹。升级时把新版本解压覆盖到**同一个文件夹**，再在扩展页点刷新——换了文件夹 Chrome 会当成另一个扩展，登录状态和历史记录都不会带过去。
+- **Firefox：** 正式版 Firefox 只安装签过名的扩展。把 `reach-browser-extension-<版本>-firefox.zip` 提交到 [addons.mozilla.org](https://addons.mozilla.org/developers/)，选「不公开（自行分发）」签名后安装。只是试用的话，在 `about:debugging` →「此 Firefox」→「临时载入附加组件」直接选这个 zip，重启浏览器后失效。
+
+### 从源码构建
+
+要求 Node.js 22+。
 
 ```bash
 git clone https://github.com/fujioky/reach-browser-extension.git
@@ -34,8 +41,7 @@ npm run build            # Chrome / Edge → .output/chrome-mv3
 npm run build:firefox    # Firefox       → .output/firefox-mv3
 ```
 
-- **Chrome / Edge：** 打开 `chrome://extensions`（Edge 为 `edge://extensions`），打开「开发者模式」，「加载已解压的扩展程序」，选择 `.output/chrome-mv3`。
-- **Firefox：** 正式版 Firefox 只能安装签过名的扩展。`npm run zip:firefox` 打出 zip，到 [addons.mozilla.org](https://addons.mozilla.org/developers/) 以「不公开（自行分发）」提交签名后安装。只是试用的话，可以在 `about:debugging` →「此 Firefox」→「临时载入附加组件」选择 `.output/firefox-mv3/manifest.json`，重启浏览器后失效。
+加载方式同上：Chrome / Edge 选 `.output/chrome-mv3` 文件夹，Firefox 临时载入选 `.output/firefox-mv3/manifest.json`。
 
 ## 登录
 
@@ -97,6 +103,8 @@ npm run typecheck
 npm run zip             # 打包 Chrome 版 zip
 npm run zip:firefox     # Firefox 版 zip + 源码 zip（AMO 审核需要）
 ```
+
+发版：改 `package.json` 的 `version`（即扩展版本号），`npm run zip && npm run zip:firefox`，把 `.output/` 下的 chrome / firefox 两个 zip 上传到对应 tag 的 Release。
 
 ```
 entrypoints/
