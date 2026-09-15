@@ -1,0 +1,67 @@
+/* Reach design tokens, trimmed to what the popup and options page use.
+ * Source of truth: app/globals.css in the Reach app. The extension has no
+ * theme toggle, so dark follows the system instead of a .dark class. */
+
+@import 'tailwindcss';
+
+@theme {
+  --color-brand: #5b4fe9;
+  --color-brand-hover: #4a3fd4;
+  --color-tint: #f1f0fd;
+
+  --color-ink: #17161b;
+  --color-muted: #6c6b75;
+  --color-subtle: #9c9ba6;
+  --color-paper: #fafaf8;
+  --color-surface: #ffffff;
+  --color-surface-2: #f3f2f7;
+  --color-border: #ecebf1;
+
+  --color-success: #0fa968;
+  --color-danger: #e5484d;
+  --color-warning: #e0a800;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-brand: 0 4px 14px rgba(91, 79, 233, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-brand: #8b82ff;
+    --color-brand-hover: #a89fff;
+    --color-tint: #1c1a35;
+
+    --color-ink: #f3f2f7;
+    --color-muted: #9a99a6;
+    --color-subtle: #6e6d79;
+    --color-paper: #0d0d11;
+    --color-surface: #16161c;
+    --color-surface-2: #1c1c22;
+    --color-border: #272730;
+
+    --color-danger: #ff5252;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-brand: 0 4px 14px rgba(139, 130, 255, 0.3);
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
