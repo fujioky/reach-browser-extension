@@ -1,6 +1,9 @@
-// Share jobs live in session storage: the background runs them, the popup
-// renders whatever is there. A share takes seconds to minutes and the popup
-// closes the moment it loses focus, so it can never own the work itself.
+// Share history. The background runs every share and records it here; the
+// popup renders whatever is there. A share takes seconds to minutes and the
+// popup closes the moment it loses focus, so it can never own the work itself.
+//
+// Kept in `local` so the history — and the link for a post shared yesterday —
+// survives a browser restart.
 
 import { MatchPattern, storage } from '#imports';
 
@@ -19,17 +22,14 @@ export type Job =
   | (JobBase & { status: 'done'; result: ShareResult; copied: boolean })
   | (JobBase & { status: 'error'; error: string });
 
-export const jobsItem = storage.defineItem<Job[]>('session:jobs', { fallback: [] });
+/** Newest first. */
+export const historyItem = storage.defineItem<Job[]>('local:shareHistory', { fallback: [] });
 
-/** How many recent jobs the popup keeps listing. */
-export const MAX_JOBS = 8;
+export const MAX_HISTORY = 50;
 
-export interface ShareMessage {
-  type: 'share';
-  id: string;
-  url: string;
-  options: ShareOptions;
-}
+export type BackgroundMessage =
+  | { type: 'share'; id: string; url: string; options: ShareOptions }
+  | { type: 'forget'; ids: string[] };
 
 /** Pages Reach can mirror — also the right-click menu's URL filter. */
 export const POST_URL_PATTERNS = [
@@ -51,6 +51,38 @@ export function isPostUrl(url: string | undefined): url is string {
   } catch {
     return false;
   }
+}
+
+/**
+ * Which post a link points at, so history finds a share whatever form the link
+ * took — twitter.com or x.com, a ?s=20 tail, a /photo/1 suffix, youtu.be or a
+ * watch URL. Anything unrecognised is keyed by the URL itself.
+ */
+export function postKey(url: string): string {
+  const trimmed = url.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return trimmed;
+  }
+  const host = parsed.hostname.replace(/^(www|mobile|m)\./, '');
+
+  if (host === 'x.com' || host === 'twitter.com') {
+    const status = parsed.pathname.match(/\/status(?:es)?\/(\d+)/)?.[1];
+    if (status) return `x:${status}`;
+  }
+  const videoId =
+    host === 'youtu.be'
+      ? parsed.pathname.split('/')[1]
+      : host === 'youtube.com'
+        ? parsed.pathname === '/watch'
+          ? parsed.searchParams.get('v')
+          : parsed.pathname.match(/^\/(?:shorts|live|embed)\/([^/]+)/)?.[1]
+        : null;
+  if (videoId) return `youtube:${videoId}`;
+
+  return `${parsed.origin}${parsed.pathname}${parsed.search}`;
 }
 
 export function stageLabel(stage: ShareStage | null): string {

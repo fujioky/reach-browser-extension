@@ -2,16 +2,22 @@
 // the work — a request that can take a minute — has to outlive the popup,
 // which closes as soon as it loses focus.
 //
-// Job state goes to session storage, where the popup renders it. Nothing else
-// in memory matters across a restart, so a job still marked running when the
-// background starts again was cut off and is reported as such.
+// Every share is recorded in the history (local storage), which the popup
+// renders. Nothing in memory survives a restart, so a job still marked running
+// when the background starts again was cut off and is reported as such.
 
 import { browser, defineBackground } from '#imports';
 
-import { toAccessControl } from '@/utils/access';
+import { toShareRequest } from '@/utils/access';
 import { createShareLink, SignedOutError } from '@/utils/api';
 import { copyToClipboard } from '@/utils/clipboard';
-import { jobsItem, MAX_JOBS, POST_URL_PATTERNS, type Job, type ShareMessage } from '@/utils/jobs';
+import {
+  historyItem,
+  MAX_HISTORY,
+  POST_URL_PATTERNS,
+  type BackgroundMessage,
+  type Job,
+} from '@/utils/jobs';
 import { connectionItem, defaultOptionsItem } from '@/utils/settings';
 
 const MENU_LINK = 'share-link';
@@ -53,8 +59,12 @@ export default defineBackground(() => {
     });
   });
 
-  browser.runtime.onMessage.addListener((message: ShareMessage) => {
+  browser.runtime.onMessage.addListener((message: BackgroundMessage) => {
     if (message?.type === 'share') void runShare(message);
+    // Running shares stay: they are still going to finish and be copied.
+    if (message?.type === 'forget') {
+      void updateJobs((jobs) => jobs.filter((j) => j.status === 'running' || !message.ids.includes(j.id)));
+    }
   });
 
   browser.runtime.onConnect.addListener((port) => {
@@ -66,7 +76,7 @@ export default defineBackground(() => {
   });
 
   browser.notifications.onClicked.addListener(async (notificationId) => {
-    const job = (await jobsItem.getValue()).find((j) => j.id === notificationId);
+    const job = (await historyItem.getValue()).find((j) => j.id === notificationId);
     if (job?.status === 'done') await browser.tabs.create({ url: job.result.adminUrl });
     await browser.notifications.clear(notificationId);
   });
@@ -82,7 +92,7 @@ let openPopups = 0;
 const running = new Set<string>();
 let keepAwake: ReturnType<typeof setInterval> | undefined;
 
-async function runShare({ id, url, options }: ShareMessage) {
+async function runShare({ id, url, options }: Extract<BackgroundMessage, { type: 'share' }>) {
   const startedAt = Date.now();
   const connection = await connectionItem.getValue();
   if (!connection) {
@@ -102,7 +112,7 @@ async function runShare({ id, url, options }: ShareMessage) {
   try {
     const result = await createShareLink(
       connection,
-      { url, accessControl: toAccessControl(options) },
+      { url, ...toShareRequest(options) },
       (stage) =>
         void updateJobs((jobs) =>
           jobs.map((j) => (j.id === id && j.status === 'running' ? { ...j, stage } : j)),
@@ -146,11 +156,11 @@ async function finish(job: Job) {
 
 let jobsWrite: Promise<unknown> = Promise.resolve();
 
-/** Serialized read-modify-write, newest first, capped at MAX_JOBS. */
+/** Serialized read-modify-write of the history, newest first, capped at MAX_HISTORY. */
 function updateJobs(update: (jobs: Job[]) => Job[]): Promise<void> {
   const run = jobsWrite.then(async () => {
-    const jobs = update(await jobsItem.getValue());
-    await jobsItem.setValue(jobs.slice(0, MAX_JOBS));
+    const jobs = update(await historyItem.getValue());
+    await historyItem.setValue(jobs.slice(0, MAX_HISTORY));
   });
   jobsWrite = run.catch(() => {});
   return run;

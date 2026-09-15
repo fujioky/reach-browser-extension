@@ -4,7 +4,7 @@
 
 import { storage } from '#imports';
 
-import type { ShareOptions } from './access';
+import { DEFAULT_SHARE_OPTIONS, type ShareOptions } from './access';
 
 export interface Connection {
   /** Origin of the Reach site, e.g. https://reach.example.com */
@@ -21,8 +21,8 @@ export const connectionItem = storage.defineItem<Connection | null>('local:conne
 export const lastBaseUrlItem = storage.defineItem<string>('local:lastBaseUrl', { fallback: '' });
 
 /** Used for right-click shares and as the popup's starting values. */
-export const defaultOptionsItem = storage.defineItem<ShareOptions>('local:defaultOptions', {
-  fallback: { expiry: 'never', maxViews: null, burnAfterRead: false },
+export const defaultOptionsItem = storage.defineItem<ShareOptions>('local:shareDefaults', {
+  fallback: DEFAULT_SHARE_OPTIONS,
 });
 
 /** Accepts what people paste — a bare host, a trailing slash, an admin page URL. */

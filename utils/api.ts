@@ -6,7 +6,7 @@
 // request waiting 30s for response headers, which is when Chrome gives up on
 // an extension service worker.
 
-import type { AccessControl } from './access';
+import type { ShareRequestOptions } from './access';
 import type { Connection } from './settings';
 
 export type ShareStage =
@@ -21,6 +21,8 @@ export interface ShareResult {
   /** The post was already mirrored; this is a new link on that mirror. */
   reused: boolean;
   fetchedAt: string | null;
+  /** The mirror's password after this share — what whoever opens the link will face. */
+  passwordMode: 'none' | 'inherit' | 'custom';
   warnings: string[];
 }
 
@@ -97,7 +99,7 @@ export async function signOut(connection: Connection): Promise<void> {
 
 export async function createShareLink(
   connection: Connection,
-  request: { url: string; accessControl: AccessControl },
+  request: { url: string } & ShareRequestOptions,
   onStage: (stage: ShareStage) => void,
 ): Promise<ShareResult> {
   const response = await callAuthorized(connection, 'share', {

@@ -1,26 +1,67 @@
 import { describe, expect, it } from 'vitest';
 
-import { toAccessControl } from '../access';
-import { isPostUrl, stageLabel } from '../jobs';
+import { canShareWith, DEFAULT_SHARE_OPTIONS, toShareRequest } from '../access';
+import { isPostUrl, postKey, stageLabel } from '../jobs';
 import { describeBrowser, normalizeBaseUrl } from '../settings';
 
-describe('toAccessControl', () => {
+describe('toShareRequest', () => {
   const now = Date.UTC(2026, 8, 15, 12, 0, 0);
 
-  it('leaves expiry open for "never"', () => {
-    expect(toAccessControl({ expiry: 'never', maxViews: null, burnAfterRead: false }, now)).toEqual({
-      expiresAt: null,
-      maxViews: null,
-      burnAfterRead: false,
+  it('leaves expiry open and sends no password by default', () => {
+    expect(toShareRequest(DEFAULT_SHARE_OPTIONS, now)).toEqual({
+      accessControl: { expiresAt: null, maxViews: null, burnAfterRead: false },
+      password: undefined,
     });
   });
 
   it('counts preset days from now and passes the caps through', () => {
-    expect(toAccessControl({ expiry: '7d', maxViews: 3, burnAfterRead: true }, now)).toEqual({
+    expect(toShareRequest({ ...DEFAULT_SHARE_OPTIONS, expiry: '7d', maxViews: 3, burnAfterRead: true }, now).accessControl).toEqual({
       expiresAt: '2026-09-22T12:00:00.000Z',
       maxViews: 3,
       burnAfterRead: true,
     });
+  });
+
+  it('sends the site password choice, or the trimmed custom password', () => {
+    expect(toShareRequest({ ...DEFAULT_SHARE_OPTIONS, passwordMode: 'inherit', password: 'ignored' }, now).password).toEqual({ mode: 'inherit' });
+    expect(toShareRequest({ ...DEFAULT_SHARE_OPTIONS, passwordMode: 'custom', password: ' abc ' }, now).password).toEqual({
+      mode: 'custom',
+      value: 'abc',
+    });
+    // A password typed and then switched away from is not sent.
+    expect(toShareRequest({ ...DEFAULT_SHARE_OPTIONS, passwordMode: 'keep', password: 'abc' }, now).password).toBeUndefined();
+  });
+
+  it('holds a custom-password share back until the password is filled in', () => {
+    expect(canShareWith({ ...DEFAULT_SHARE_OPTIONS, passwordMode: 'custom', password: '  ' })).toBe(false);
+    expect(canShareWith({ ...DEFAULT_SHARE_OPTIONS, passwordMode: 'custom', password: 'x' })).toBe(true);
+    expect(canShareWith({ ...DEFAULT_SHARE_OPTIONS, passwordMode: 'inherit' })).toBe(true);
+  });
+});
+
+describe('postKey', () => {
+  it('gives every form of a post link the same key', () => {
+    const tweet = [
+      'https://x.com/jack/status/20',
+      'https://twitter.com/jack/status/20?s=20',
+      'https://mobile.twitter.com/jack/status/20/photo/1',
+      'https://x.com/i/web/status/20',
+    ].map(postKey);
+    expect(new Set(tweet)).toEqual(new Set(['x:20']));
+
+    const video = [
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      'https://m.youtube.com/watch?v=dQw4w9WgXcQ&t=42s',
+      'https://youtu.be/dQw4w9WgXcQ?si=abc',
+      'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+    ].map(postKey);
+    expect(new Set(video)).toEqual(new Set(['youtube:dQw4w9WgXcQ']));
+  });
+
+  it('keeps different posts apart and falls back to the URL', () => {
+    expect(postKey('https://x.com/jack/status/21')).not.toBe(postKey('https://x.com/jack/status/20'));
+    expect(postKey('https://example.com/a?b=1#c')).toBe('https://example.com/a?b=1');
+    expect(postKey(' not a url ')).toBe('not a url');
   });
 });
 

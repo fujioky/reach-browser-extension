@@ -11,7 +11,11 @@ import {
 } from '../api';
 
 const connection = { baseUrl: 'https://reach.test', token: 'reach_token', username: 'admin' };
-const request = { url: 'https://x.com/jack/status/20', accessControl: { expiresAt: null, maxViews: null, burnAfterRead: false } };
+const request = {
+  url: 'https://x.com/jack/status/20',
+  accessControl: { expiresAt: null, maxViews: null, burnAfterRead: false },
+  password: { mode: 'custom' as const, value: 'open sesame' },
+};
 
 /** A response whose body arrives in the given chunks, the way a network stream does. */
 function streamed(chunks: string[], init: ResponseInit = { status: 200 }) {
@@ -98,6 +102,7 @@ describe('createShareLink', () => {
     title: 'Hello',
     reused: false,
     fetchedAt: null,
+    passwordMode: 'custom',
     warnings: [],
   };
 
@@ -114,7 +119,15 @@ describe('createShareLink', () => {
     const result = await createShareLink(connection, request, (stage) => stages.push(stage));
 
     expect(stages).toEqual([{ type: 'stage', phase: 'fetching' }, { type: 'stage', phase: 'images', done: 0, total: 2 }]);
-    expect(result.shareUrl).toBe('https://reach.test/s/abc');
+    expect(result).toMatchObject({ shareUrl: 'https://reach.test/s/abc', passwordMode: 'custom' });
+  });
+
+  it('posts the link, its access control and the mirror password', async () => {
+    const fetch = mockFetch(streamed([JSON.stringify(done)]));
+    await createShareLink(connection, request, () => {});
+    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://reach.test/api/extension/share');
+    expect(JSON.parse(init.body as string)).toEqual(request);
   });
 
   it('accepts a final line without a trailing newline', async () => {

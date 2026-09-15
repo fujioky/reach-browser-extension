@@ -1,5 +1,6 @@
-// The share popup: the link (the current tab when it is a post), this link's
-// access options, and the recent shares the background has run.
+// The share popup: the link (the current tab when it is a post) and its share
+// options; under them, the share for that link when there is one, then the
+// rest of the history, folded away until asked for.
 
 import { useEffect, useRef, useState } from 'react';
 
@@ -8,22 +9,30 @@ import { browser } from '#imports';
 import { ReachMark } from '@/components/ReachMark';
 import { ShareOptionsFields } from '@/components/ShareOptionsFields';
 import { useStorageValue } from '@/components/useStorageValue';
-import type { ShareOptions } from '@/utils/access';
-import { isPostUrl, jobsItem, stageLabel, type Job, type ShareMessage } from '@/utils/jobs';
+import { canShareWith, type ShareOptions } from '@/utils/access';
+import {
+  historyItem,
+  isPostUrl,
+  postKey,
+  stageLabel,
+  type BackgroundMessage,
+  type Job,
+} from '@/utils/jobs';
 import { connectionItem, defaultOptionsItem } from '@/utils/settings';
 
-function sendShare(message: ShareMessage) {
-  // Nothing answers this message; the job shows up in storage instead.
+function send(message: BackgroundMessage) {
+  // Nothing answers these messages; the result shows up in storage instead.
   void browser.runtime.sendMessage(message).catch(() => {});
 }
 
 export function App() {
   const connection = useStorageValue(connectionItem);
   const defaults = useStorageValue(defaultOptionsItem);
-  const jobs = useStorageValue(jobsItem);
+  const history = useStorageValue(historyItem);
   const [url, setUrl] = useState('');
   const [tabChecked, setTabChecked] = useState(false);
   const [options, setOptions] = useState<ShareOptions>();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
   const focusedRef = useRef(false);
@@ -45,7 +54,7 @@ export function App() {
     if (defaults && !options) setOptions(defaults);
   }, [defaults, options]);
 
-  const ready = connection !== undefined && jobs !== undefined && options !== undefined;
+  const ready = connection !== undefined && history !== undefined && options !== undefined;
 
   // Opened on a post (by click or Alt+Shift+S), Enter alone shares it. Once
   // only — later focus belongs to whoever is typing.
@@ -60,7 +69,12 @@ export function App() {
   }
 
   const link = url.trim();
-  const sharing = jobs.some((job) => job.status === 'running' && job.url === link);
+  const key = link ? postKey(link) : null;
+  // The newest share of the post in the box — the current page unless edited.
+  const current = key ? history.find((job) => postKey(job.url) === key) : undefined;
+  const earlier = history.filter((job) => job !== current);
+  const earlierRunning = earlier.filter((job) => job.status === 'running').length;
+  const sharing = current?.status === 'running';
 
   return (
     <div className="w-[360px] bg-paper">
@@ -91,8 +105,8 @@ export function App() {
           className="flex flex-col gap-3 px-4 py-3.5"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!link || sharing) return;
-            sendShare({ type: 'share', id: crypto.randomUUID(), url: link, options });
+            if (!link || sharing || !canShareWith(options)) return;
+            send({ type: 'share', id: crypto.randomUUID(), url: link, options });
           }}
         >
           <input
@@ -108,10 +122,10 @@ export function App() {
           <button
             ref={submitRef}
             type="submit"
-            disabled={!link || sharing}
+            disabled={!link || sharing || !canShareWith(options)}
             className="rounded-sm bg-brand py-2 text-[13px] font-semibold text-white shadow-brand transition-colors hover:bg-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:bg-surface-2 disabled:text-subtle disabled:shadow-none"
           >
-            {sharing ? '正在分享…' : '生成分享链接'}
+            {sharing ? '正在分享…' : current ? '再生成一个分享链接' : '生成分享链接'}
           </button>
         </form>
       ) : (
@@ -127,12 +141,51 @@ export function App() {
         </div>
       )}
 
-      {jobs.length > 0 && (
-        <ul className="flex flex-col border-t border-border">
-          {jobs.map((job) => (
-            <JobRow key={job.id} job={job} />
-          ))}
-        </ul>
+      {current && (
+        <div className="border-t border-border">
+          <JobRow job={current} />
+        </div>
+      )}
+
+      {earlier.length > 0 && (
+        <section className="border-t border-border">
+          <div className="flex items-center px-4 py-2">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((open) => !open)}
+              aria-expanded={historyOpen}
+              className="flex items-center gap-1.5 text-[12px] text-muted hover:text-ink"
+            >
+              <svg
+                width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                className={`transition-transform ${historyOpen ? 'rotate-90' : ''}`}
+                aria-hidden="true"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+              历史记录 · {earlier.length}
+              {earlierRunning > 0 && <span className="text-brand">· {earlierRunning} 个进行中</span>}
+            </button>
+            {historyOpen && earlier.some((job) => job.status !== 'running') && (
+              <button
+                type="button"
+                onClick={() => send({ type: 'forget', ids: earlier.map((job) => job.id) })}
+                className="ml-auto text-[11px] text-subtle hover:text-danger"
+              >
+                清空
+              </button>
+            )}
+          </div>
+          {historyOpen && (
+            <ul className="flex flex-col border-t border-border">
+              {earlier.map((job) => (
+                <li key={job.id} className="border-b border-border last:border-b-0">
+                  <JobRow job={job} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
     </div>
   );
@@ -140,7 +193,7 @@ export function App() {
 
 function JobRow({ job }: { job: Job }) {
   return (
-    <li className="border-b border-border px-4 py-3 last:border-b-0">
+    <div className="px-4 py-3">
       {job.status === 'running' && (
         <div className="flex items-center gap-2.5">
           <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-brand border-t-transparent" />
@@ -161,20 +214,40 @@ function JobRow({ job }: { job: Job }) {
           </div>
           <button
             type="button"
-            onClick={() => sendShare({ type: 'share', id: job.id, url: job.url, options: job.options })}
+            onClick={() => send({ type: 'share', id: job.id, url: job.url, options: job.options })}
             className="shrink-0 rounded-sm border border-border bg-surface px-2.5 py-1 text-[12px] text-muted hover:text-ink"
           >
             重试
           </button>
         </div>
       )}
-    </li>
+    </div>
+  );
+}
+
+function CopyButton({ text, label = '复制' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+      }}
+      className={`shrink-0 rounded-sm border px-2.5 py-1 text-[12px] transition-colors ${
+        copied ? 'border-success text-success' : 'border-border bg-surface text-muted hover:text-ink'
+      }`}
+    >
+      {copied ? '已复制' : label}
+    </button>
   );
 }
 
 function DoneJob({ job }: { job: Extract<Job, { status: 'done' }> }) {
-  const [copied, setCopied] = useState(false);
-  const { result } = job;
+  const { result, options } = job;
+  // The password typed for this share, when it is what now guards the mirror.
+  const password =
+    result.passwordMode === 'custom' && options.passwordMode === 'custom' ? options.password.trim() : null;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -196,22 +269,33 @@ function DoneJob({ job }: { job: Extract<Job, { status: 'done' }> }) {
         <code className="min-w-0 flex-1 truncate rounded-sm bg-surface-2 px-2 py-1 font-mono text-[11px] text-ink">
           {result.shareUrl}
         </code>
-        <button
-          type="button"
-          onClick={async () => {
-            await navigator.clipboard.writeText(result.shareUrl);
-            setCopied(true);
-          }}
-          className={`shrink-0 rounded-sm border px-2.5 py-1 text-[12px] transition-colors ${
-            copied ? 'border-success text-success' : 'border-border bg-surface text-muted hover:text-ink'
-          }`}
-        >
-          {copied ? '已复制' : '复制'}
-        </button>
+        <CopyButton text={result.shareUrl} />
       </div>
+      {result.passwordMode !== 'none' && (
+        <div className="flex items-center gap-1.5 text-[11px] text-ink">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-warning" aria-hidden="true">
+            <rect x="4" y="11" width="16" height="10" rx="2" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          {password ? (
+            <>
+              <span className="min-w-0 flex-1 truncate">
+                访问密码 <code className="font-mono">{password}</code>
+              </span>
+              <CopyButton text={password} label="复制密码" />
+            </>
+          ) : (
+            <span className="text-muted">
+              {result.passwordMode === 'inherit' ? '需要系统密码才能打开' : '需要这份镜像原有的单独密码才能打开'}
+            </span>
+          )}
+        </div>
+      )}
       <div className="text-[11px] text-subtle">
-        {job.copied && !copied && '已自动复制 · '}
+        {job.copied && '已自动复制链接 · '}
         {result.reused ? `沿用已有镜像${formatFetchedAt(result.fetchedAt)}` : '新建镜像'}
+        {' · '}
+        {formatWhen(job.startedAt)}
       </div>
       {result.warnings.length > 0 && (
         <details className="text-[11px] text-warning">
@@ -239,4 +323,11 @@ function formatFetchedAt(iso: string | null): string {
   if (!iso) return '';
   const date = new Date(iso);
   return `（内容抓取于 ${date.getMonth() + 1} 月 ${date.getDate()} 日）`;
+}
+
+function formatWhen(timestamp: number): string {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  return date.toDateString() === today.toDateString() ? time : `${date.getMonth() + 1} 月 ${date.getDate()} 日 ${time}`;
 }
