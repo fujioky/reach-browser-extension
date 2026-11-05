@@ -14,6 +14,7 @@ import {
   historyItem,
   isPostUrl,
   postKey,
+  shareMessage,
   stageLabel,
   type BackgroundMessage,
   type Job,
@@ -82,8 +83,26 @@ export function App() {
         <ReachMark size={18} className="text-brand" />
         <span className="text-[14px] font-bold text-ink">Reach 分享</span>
         {connection && (
-          <span className="min-w-0 truncate text-[11px] text-subtle" title={connection.baseUrl}>
-            {connection.username} · {new URL(connection.baseUrl).host}
+          <span className="flex min-w-0 items-center gap-1 text-[11px] text-subtle">
+            <a
+              href={`${connection.baseUrl}/admin`}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 hover:text-brand"
+              title="打开管理后台"
+            >
+              {connection.username}
+            </a>
+            <span aria-hidden="true">·</span>
+            <a
+              href={connection.baseUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="min-w-0 truncate hover:text-brand"
+              title={`打开 ${connection.baseUrl}`}
+            >
+              {new URL(connection.baseUrl).host}
+            </a>
           </span>
         )}
         <button
@@ -225,11 +244,12 @@ function JobRow({ job }: { job: Job }) {
   );
 }
 
-function CopyButton({ text, label = '复制' }: { text: string; label?: string }) {
+function CopyButton({ text, label = '复制', hint }: { text: string; label?: string; hint?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
+      title={hint}
       onClick={async () => {
         await navigator.clipboard.writeText(text);
         setCopied(true);
@@ -270,6 +290,11 @@ function DoneJob({ job }: { job: Extract<Job, { status: 'done' }> }) {
           {result.shareUrl}
         </code>
         <CopyButton text={result.shareUrl} />
+        <CopyButton
+          text={shareMessage(result.title, result.shareUrl, password)}
+          label="带标题"
+          hint={`复制为「【标题】+ 换行 + 链接」${password ? '，并附上访问密码' : ''}`}
+        />
       </div>
       {result.passwordMode !== 'none' && (
         <div className="flex items-center gap-1.5 text-[11px] text-ink">

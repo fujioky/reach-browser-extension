@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { canShareWith, DEFAULT_SHARE_OPTIONS, toShareRequest } from '../access';
-import { isPostUrl, postKey, stageLabel } from '../jobs';
+import { isPostUrl, postKey, shareMessage, stageLabel } from '../jobs';
 import { describeBrowser, normalizeBaseUrl } from '../settings';
 
 describe('toShareRequest', () => {
@@ -123,5 +123,23 @@ describe('stageLabel', () => {
   it('counts the image being transferred, one-based', () => {
     expect(stageLabel({ phase: 'images', done: 0, total: 3 })).toBe('转存图片 1/3…');
     expect(stageLabel(null)).toBe('连接 Reach…');
+  });
+});
+
+describe('shareMessage', () => {
+  const url = 'https://reach.example.com/s/abc';
+
+  it('puts the bracketed title above the link', () => {
+    expect(shareMessage('风评反转', url)).toBe(`【风评反转】\n${url}`);
+  });
+
+  it('flattens whitespace and cuts long titles at 60 characters', () => {
+    const long = '一'.repeat(70);
+    expect(shareMessage(`a\n\n b  ${long}`, url)).toBe(`【a b ${'一'.repeat(56)}…】\n${url}`);
+  });
+
+  it('falls back to the bare link and appends a known password', () => {
+    expect(shareMessage('  ', url, 'p@ss')).toBe(`${url}\n访问密码：p@ss`);
+    expect(shareMessage('t', url, null)).toBe(`【t】\n${url}`);
   });
 });

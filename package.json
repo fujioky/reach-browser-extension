@@ -2,7 +2,7 @@
   "name": "reach-browser-extension",
   "description": "在 X / YouTube 页面一键生成 Reach 分享链接",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",

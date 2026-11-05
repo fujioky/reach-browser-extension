@@ -96,3 +96,17 @@ export function stageLabel(stage: ShareStage | null): string {
       return '生成分享链接…';
   }
 }
+
+const SHARE_TITLE_MAX = 60;
+
+/**
+ * What 「复制标题」 puts on the clipboard: the title on its own line, the link
+ * under it, then the password when the popup knows it. Tweet titles are the
+ * whole tweet, so long ones are cut — the link is what the reader follows.
+ */
+export function shareMessage(title: string, url: string, password?: string | null): string {
+  const flat = title.replace(/\s+/g, ' ').trim();
+  const chars = [...flat];
+  const head = chars.length > SHARE_TITLE_MAX ? `${chars.slice(0, SHARE_TITLE_MAX).join('')}…` : flat;
+  return [head && `【${head}】`, url, password && `访问密码：${password}`].filter(Boolean).join('\n');
+}
