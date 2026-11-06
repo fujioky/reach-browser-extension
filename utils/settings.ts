@@ -29,12 +29,24 @@ export const defaultOptionsItem = storage.defineItem<ShareOptions>('local:shareD
 export function normalizeBaseUrl(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
+  if (/[\u0000-\u001f\u007f\\]/.test(trimmed)) return null;
   try {
     const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
+    url.hostname = url.hostname.replace(/\.$/, '');
     return url.origin;
   } catch {
     return null;
   }
+}
+
+/** Compare parsed host labels, never substrings of an address. HTTP still selects
+ * FUJIOKY so it can be rejected rather than accidentally showing password login. */
+export function isFujiokyUrl(input: string): boolean {
+  const origin = normalizeBaseUrl(input);
+  if (!origin) return false;
+  const hostname = new URL(origin).hostname;
+  return hostname === 'fujioky.com' || hostname.endsWith('.fujioky.com');
 }
 
 /** How this sign-in is labelled in Reach's list of extensions, e.g. "Chrome · macOS". */

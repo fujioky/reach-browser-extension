@@ -7,7 +7,7 @@ A browser extension (Chrome / Edge / Firefox) for [Reach](https://github.com/fuj
 | | |
 | --- | --- |
 | ![Popup](docs/screenshots/popup.png) | ![Options](docs/screenshots/options.png) |
-| Popup: the current post, access control and password, this post's share with the rest folded into history | Options: sign in with the admin account, default share settings |
+| Popup: the current post, access control and password, this post's share with the rest folded into history | Options: account connection, default share settings |
 
 ## What it does
 
@@ -45,9 +45,16 @@ Load it the same way: the `.output/chrome-mv3` folder in Chrome / Edge, `.output
 
 ## Sign in
 
-Open the extension's options (the gear in the popup) and enter the Reach address with the admin username and password.
+Open the extension's options (the gear in the popup) and enter the Reach address. One build selects authentication from the parsed hostname:
 
-The password is used once: Reach checks it and issues a token for this browser, and the extension keeps only the token (in `storage.local`, never synced with the browser account). Reach lists every signed-in extension with its last use under 系统 → 浏览器扩展, where each can be revoked; signing out in the extension revokes its token on the server too. After a revoke, the next share asks you to sign in again.
+- `fujioky.com` and its subdomains: HTTPS and FUJIOKY web authorization for the independent **Reach Browser Extension** application. Confirm on the central consent page; the extension returns to Settings automatically without a pasted authorization code.
+- Other domains: the existing self-hosted Reach administrator username and password.
+
+Use `https://reachs.fujioky.com` for production. A FUJIOKY host without the production authentication adapter reports an error instead of falling back to passwords. This does not enable production identity on the independent demo server.
+
+Revoke the application in FUJIOKY Account → Sessions and access, or revoke an individual device in Reach. Administrators bypass VIP; ordinary members are checked when using the extension.
+
+For self-hosted Reach, the password is used once: Reach checks it and issues a token for this browser, and the extension keeps only the token (in `storage.local`, never synced with the browser account). Reach lists every signed-in extension with its last use under 系统 → 浏览器扩展, where each can be revoked; signing out in the extension revokes its token on the server too. After a revoke, the next share asks you to sign in again.
 
 ## How it works
 
@@ -55,7 +62,7 @@ The password is used once: Reach checks it and issues a token for this browser, 
 - **The API streams.** `POST /api/extension/share` answers in NDJSON: one line per stage (fetching, copying images, creating the link), then a `done` line. Chrome terminates an extension service worker whose fetch gets no response within 30 seconds, and fetching a new post often takes longer; streaming sends the headers at once. A stream that ends without `done` is a failure — that is what a function timeout looks like.
 - **Keep-alive.** While a share runs, the background writes to `storage.session` every 20 seconds: Chrome resets its idle timer on any extension API call, Firefox on an incoming extension event (the `storage.onChanged` that write triggers). Without it, a 70-second share was terminated by Chrome mid-way in testing.
 - **Clipboard.** Chrome's service worker has no `navigator.clipboard`, so the text goes to an offscreen document that writes it with `execCommand('copy')` (an offscreen document can never be focused, which rules out the async Clipboard API there too). Firefox's event page has a DOM and writes directly under the `clipboardWrite` permission.
-- **Cross-origin.** The extension requests no host permission for the Reach site; the API allows CORS from any origin. That is safe because these endpoints never read cookies: a request carries a token or, when signing in, the password itself.
+- **Cross-origin.** The extension requests no host permission for the Reach site; the API allows CORS from any origin. That is safe because these endpoints never read cookies: a request carries a device token, a self-hosted login password, or a short-lived PKCE proof. FUJIOKY web authorization is a separate browser flow.
 
 ## Permissions
 
@@ -68,13 +75,15 @@ The password is used once: Reach checks it and issues a token for this browser, 
 | `notifications` | Report the result when the popup is closed |
 | `offscreen` (Chrome only) | Write to the clipboard outside the service worker |
 
-The extension collects nothing: it sends the links you share (and, at sign-in, the admin credentials) only to the Reach address you entered, and talks to no other service.
+The extension sends the links you share to the Reach address you configure. Self-hosted login sends the password only to that site. FUJIOKY login happens on the central account page; the extension never receives your FUJIOKY password and stores only the device token and display name locally. Login state and share history are never synced with your browser account.
 
 ## API
 
 These are the only Reach endpoints the extension calls; they live in the Reach repository under `app/api/extension/`.
 
 ```
+POST   /api/extension/authorization       { challenge, method: "S256", name } → short-lived web authorization (production)
+POST   /api/extension/authorization/token { requestId, verifier } → pending/device token (production)
 POST   /api/extension/session   { username, password, name }  → { token, username }
 GET    /api/extension/session   Authorization: Bearer <token>  → { username }
 DELETE /api/extension/session   Authorization: Bearer <token>  → 204 (revokes that token)

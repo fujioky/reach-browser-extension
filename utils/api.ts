@@ -8,6 +8,7 @@
 
 import type { ShareRequestOptions } from './access';
 import type { Connection } from './settings';
+import { isFujiokyUrl } from './settings';
 
 export type ShareStage =
   | { phase: 'fetching' }
@@ -46,7 +47,7 @@ export class SignedOutError extends ReachApiError {
 async function call(baseUrl: string, path: string, init: RequestInit): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/api/extension/${path}`, init);
+    response = await fetch(`${baseUrl}/api/extension/${path}`, { ...init, credentials: 'omit', redirect: 'error' });
   } catch {
     throw new ReachApiError(`无法连接 ${baseUrl}，请检查地址和网络`);
   }
@@ -79,6 +80,7 @@ export async function signIn(
   baseUrl: string,
   credentials: { username: string; password: string; name: string },
 ): Promise<Connection> {
+  if (isFujiokyUrl(baseUrl)) throw new ReachApiError('FUJIOKY 地址请使用统一登录，不提交账号密码');
   const response = await call(baseUrl, 'session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

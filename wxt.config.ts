@@ -35,8 +35,8 @@ export default defineConfig({
               id: 'reach-share@fujioky.com',
               // data_collection_permissions below needs 140.
               strict_min_version: '140.0',
-              // The URL being shared is sent to the Reach server the user configures.
-              data_collection_permissions: { required: ['browsingActivity'] },
+              // Shares send a URL; sign-in sends account credentials or a device token.
+              data_collection_permissions: { required: ['browsingActivity', 'authenticationInfo'] },
             },
             gecko_android: { strict_min_version: '142.0' },
           },

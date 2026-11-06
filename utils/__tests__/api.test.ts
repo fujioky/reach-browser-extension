@@ -150,3 +150,11 @@ describe('createShareLink', () => {
     await expect(createShareLink(connection, request, () => {})).rejects.toBeInstanceOf(SignedOutError);
   });
 });
+
+describe('FUJIOKY password boundary', () => {
+  it('never sends a password to a FUJIOKY host', async () => {
+    const fetch = mockFetch(Response.json({}));
+    await expect(signIn('https://reachs.fujioky.com', {username:'a',password:'secret',name:'n'})).rejects.toThrow('统一登录');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});

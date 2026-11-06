@@ -1,18 +1,21 @@
-// Options: sign in to a Reach site with the admin account, and the access
-// settings right-click shares use.
+// Options: choose authentication from the Reach host and configure defaults
+// for right-click shares.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { browser } from 'wxt/browser';
 
 import { ReachMark } from '@/components/ReachMark';
 import { ShareOptionsFields } from '@/components/ShareOptionsFields';
 import { useStorageValue } from '@/components/useStorageValue';
 import { checkSession, signIn, signOut, SignedOutError } from '@/utils/api';
+import { signInFujioky } from '@/utils/fujioky-login';
 import {
   connectionItem,
   defaultOptionsItem,
   describeBrowser,
   lastBaseUrlItem,
   normalizeBaseUrl,
+  isFujiokyUrl,
   type Connection,
 } from '@/utils/settings';
 
@@ -69,8 +72,11 @@ function SignInForm() {
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const login = useRef<AbortController | null>(null);
+  useEffect(() => () => login.current?.abort(), []);
 
-  const address = baseUrl ?? lastBaseUrl ?? '';
+  const address = baseUrl ?? (lastBaseUrl || 'https://reachs.fujioky.com');
+  const fujioky = isFujiokyUrl(address);
 
   return (
     <form
@@ -82,10 +88,26 @@ function SignInForm() {
           setError('请填写 Reach 的地址，例如 https://reach.example.com');
           return;
         }
+        if (fujioky && !origin.startsWith('https://')) {
+          setError('FUJIOKY 登录需要 HTTPS，请将地址改为 https://');
+          return;
+        }
+        const controller = new AbortController();
+        login.current = controller;
         setPending(true);
         setError(null);
         try {
-          const signedIn = await signIn(origin, {
+          const signedIn = fujioky ? await signInFujioky(origin, {
+            name: describeBrowser(), signal: controller.signal,
+            openAuthorization: async (url) => {
+              const settingsTab = await browser.tabs.getCurrent();
+              const authTab = await browser.tabs.create({ url, active: true });
+              return async () => {
+                if (authTab.id !== undefined) await browser.tabs.remove(authTab.id).catch(() => {});
+                if (settingsTab?.id !== undefined) await browser.tabs.update(settingsTab.id, { active: true }).catch(() => {});
+              };
+            },
+          }) : await signIn(origin, {
             username: username.trim(),
             password,
             name: describeBrowser(),
@@ -93,7 +115,9 @@ function SignInForm() {
           await lastBaseUrlItem.setValue(origin);
           await connectionItem.setValue(signedIn);
         } catch (err) {
-          setError((err as Error).message);
+          setError(controller.signal.aborted ? '已取消登录' : (err as Error).message);
+        } finally {
+          login.current = null;
           setPending(false);
         }
       }}
@@ -107,10 +131,11 @@ function SignInForm() {
           onChange={(e) => setBaseUrl(e.target.value)}
           placeholder="https://reach.example.com"
           className={inputClass}
+          disabled={pending}
           required
         />
       </label>
-      <div className="flex gap-3">
+      {fujioky ? <p className="text-[12px] leading-relaxed text-muted">将打开 FUJIOKY 授权页，确认允许「Reach 浏览器扩展」连接你的账户。完成后会自动回到这里。</p> : <div className="flex gap-3">
         <label className="flex flex-1 flex-col gap-1.5">
           <span className="text-[12px] text-muted">管理员账号</span>
           <input
@@ -133,17 +158,21 @@ function SignInForm() {
             required
           />
         </label>
-      </div>
-      {error && <p className="text-[12px] text-danger">{error}</p>}
+      </div>}
+      {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+      {pending && fujioky && <p role="status" className="text-[12px] text-muted">等待你在 FUJIOKY 页面完成登录和授权…</p>}
+      <div className="flex items-center gap-3">
       <button
         type="submit"
         disabled={pending}
         className="self-start rounded-sm bg-brand px-5 py-2 text-[13px] font-semibold text-white shadow-brand transition-colors hover:bg-brand-hover disabled:opacity-60"
       >
-        {pending ? '登录中…' : '登录'}
+        {pending ? '登录中…' : fujioky ? '用 FUJIOKY 登录' : '登录'}
       </button>
+      {pending && fujioky && <button type="button" className="text-[12px] text-muted underline" onClick={() => login.current?.abort()}>取消</button>}
+      </div>
       <p className="text-[11px] text-subtle">
-        密码只用来换取这个浏览器专用的令牌，不会保存。可在 Reach 后台「系统 → 浏览器扩展」查看或撤销已登录的扩展。
+        {fujioky ? '可在 Reach 后台／工作区撤销本设备，或在 FUJIOKY 账户中心「会话与授权」撤销扩展的应用授权。管理员无需 VIP。' : '使用该 Reach 站点原有的管理员账号和密码。扩展只在登录时发送密码，之后仅保存本设备令牌。'}
       </p>
     </form>
   );
@@ -173,7 +202,7 @@ function SignedIn({ connection }: { connection: Connection }) {
       <div className="text-[13px] text-ink">
         已登录为 <b>{connection.username}</b>
         <a
-          href={`${connection.baseUrl}/admin`}
+          href={`${connection.baseUrl}${isFujiokyUrl(connection.baseUrl) ? '/workspace' : '/admin'}`}
           target="_blank"
           rel="noreferrer"
           className="ml-2 font-mono text-[12px] text-muted hover:text-brand"
@@ -184,6 +213,7 @@ function SignedIn({ connection }: { connection: Connection }) {
       {status === 'checking' && <p className="text-[12px] text-subtle">正在确认登录状态…</p>}
       {status === 'ok' && <p className="text-[12px] text-success">连接正常</p>}
       {status !== 'checking' && status !== 'ok' && <p className="text-[12px] text-warning">{status}</p>}
+      {isFujiokyUrl(connection.baseUrl) && <a href="https://auth.fujioky.com/account/sessions" target="_blank" rel="noreferrer" className="text-[12px] text-muted underline">在 FUJIOKY 管理扩展授权 ↗</a>}
       <button
         type="button"
         disabled={signingOut}

@@ -1,0 +1,16 @@
+{
+  "browser": "150.0.7871.24",
+  "extensionVersion": "1.2.0",
+  "nativeExtensionId": "cjjcdcpacfcgajidnebfekfcendlcilp",
+  "checks": [
+    "native options renders",
+    "FUJIOKY login shows no password",
+    "other domains use original password form",
+    "lookalikes do not select FUJIOKY",
+    "insecure FUJIOKY blocked",
+    "isolated pending authorization returns to settings",
+    "PKCE proof retained across polls",
+    "central management link visible"
+  ],
+  "network": "Authorization success is an isolated route fixture; real Logto grant/revoke tested separately by server verification."
+}

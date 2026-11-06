@@ -7,7 +7,7 @@
 | | |
 | --- | --- |
 | ![弹窗](docs/screenshots/popup.png) | ![设置](docs/screenshots/options.png) |
-| 弹窗：当前帖子、访问控制与密码、这条帖子的分享，其余收在历史记录里 | 设置：管理员账号登录、默认分享设置 |
+| 弹窗：当前帖子、访问控制与密码、这条帖子的分享，其余收在历史记录里 | 设置：账号连接、默认分享设置 |
 
 ## 功能
 
@@ -45,9 +45,16 @@ npm run build:firefox    # Firefox       → .output/firefox-mv3
 
 ## 登录
 
-打开扩展设置（弹窗右上角齿轮），填入 Reach 地址和管理员账号密码。
+打开扩展设置（弹窗右上角齿轮），填入 Reach 地址。**同一个扩展会根据解析后的域名选择登录方式**：
 
-密码只用这一次：Reach 验证通过后签发一个这个浏览器专用的令牌，扩展只保存令牌（`storage.local`，不随浏览器账号同步）。Reach 后台「系统 → 浏览器扩展」列出所有登录过的扩展及最近使用时间，可以逐个撤销；扩展里「退出登录」也会同时作废服务端的令牌。令牌被撤销后，下一次分享会提示重新登录。
+- `fujioky.com` 及其子域名：使用 HTTPS，点击「用 FUJIOKY 登录」，在统一账户的「授符」页确认连接 **Reach 浏览器扩展**。完成后自动返回设置页，不需要复制粘贴授权码。
+- 其他域名（自部署 Reach）：使用原有的管理员账号和密码登录。
+
+生产地址为 `https://reachs.fujioky.com`。FUJIOKY 域名的服务器若未启用扩展认证，会明确报错，不会退回密码登录；独立演示服务器不因此启用生产身份适配。
+
+扩展的独立授权可以在 FUJIOKY 账户中心「会话与授权」撤销；Reach 后台／工作区还可以按设备撤销。管理员不受 VIP 限制，普通用户在使用时仍校验会员权限。
+
+自部署登录的密码只用这一次：Reach 验证通过后签发一个这个浏览器专用的令牌，扩展只保存令牌（`storage.local`，不随浏览器账号同步）。Reach 后台「系统 → 浏览器扩展」列出所有登录过的扩展及最近使用时间，可以逐个撤销；扩展里「退出登录」也会同时作废服务端的令牌。令牌被撤销后，下一次分享会提示重新登录。
 
 ## 工作方式
 
@@ -55,7 +62,7 @@ npm run build:firefox    # Firefox       → .output/firefox-mv3
 - **接口流式返回。** `POST /api/extension/share` 以 NDJSON 返回：抓取、转存图片、生成链接各阶段一行，最后一行 `done`。Chrome 会终止一个 30 秒内收不到 fetch 响应的扩展 service worker，而新帖子的抓取经常超过 30 秒；流式响应让响应头立即返回。没有 `done` 就结束的流按失败处理（函数超时就是这个样子）。
 - **保活。** 有任务进行时，后台每 20 秒写一次 `storage.session`：Chrome 在任何扩展 API 调用时重置空闲计时，Firefox 在收到扩展事件（这次写入触发的 `storage.onChanged`）时重置。实测去掉这一步，70 秒的分享会在中途被 Chrome 终止。
 - **剪贴板。** Chrome 的 service worker 没有 `navigator.clipboard`，文本交给一个 offscreen document 用 `execCommand('copy')` 写入（offscreen document 无法获得焦点，异步剪贴板 API 在那里也不可用）。Firefox 的 event page 有 DOM，凭 `clipboardWrite` 权限直接写。
-- **跨域。** 扩展不申请 Reach 站点的主机权限，接口对所有来源开放 CORS。这是安全的，因为这些接口从不读取 Cookie：请求要么带令牌，要么（登录时）带密码本身。
+- **跨域。** 扩展不申请 Reach 站点的主机权限，接口对所有来源开放 CORS。这是安全的，因为这些接口从不读取 Cookie：请求携带设备令牌、自部署登录密码或短期 PKCE 证明；FUJIOKY 网页授权独立进行。
 
 ## 权限
 
@@ -68,13 +75,15 @@ npm run build:firefox    # Firefox       → .output/firefox-mv3
 | `notifications` | 弹窗关闭时通知分享结果 |
 | `offscreen`（仅 Chrome） | 在 service worker 之外写剪贴板 |
 
-扩展不收集任何数据：只把你要分享的链接（以及登录时的账号密码）发给你自己填写的 Reach 地址，不访问其他服务。
+扩展将要分享的链接发给你配置的 Reach 地址。自部署登录只把密码提交给该站点；FUJIOKY 登录在统一账户页面完成，扩展不接触统一账户密码，只在本机保存该设备的令牌与显示名。登录状态和分享历史不随浏览器账号同步。
 
 ## 接口
 
 扩展只调用 Reach 的以下接口，实现见 Reach 仓库 `app/api/extension/`。
 
 ```
+POST   /api/extension/authorization  { challenge, method: "S256", name } → 短期网页登录申请（生产）
+POST   /api/extension/authorization/token { requestId, verifier } → 等待／设备令牌（生产）
 POST   /api/extension/session   { username, password, name }  → { token, username }
 GET    /api/extension/session   Authorization: Bearer <token>  → { username }
 DELETE /api/extension/session   Authorization: Bearer <token>  → 204（撤销该令牌）
