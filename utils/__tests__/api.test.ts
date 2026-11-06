@@ -77,6 +77,20 @@ describe('signIn', () => {
 });
 
 describe('authorized calls', () => {
+  it.each(['reach_old_admin', 'legacy'])('requires a fresh FUJIOKY grant for legacy token %s without sending it', async (token) => {
+    const fetch = mockFetch(Response.json({ username: 'admin' }));
+    const old = { ...connection, baseUrl: 'https://reachs.fujioky.com', token };
+    await expect(checkSession(old)).rejects.toBeInstanceOf(SignedOutError);
+    await expect(createShareLink(old, request, () => {})).rejects.toBeInstanceOf(SignedOutError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('continues checking centrally linked FUJIOKY device credentials on the server', async () => {
+    const fetch = mockFetch(Response.json({ username: 'member' }));
+    await checkSession({ ...connection, baseUrl: 'https://reachs.fujioky.com', token: 'member_reach_new' });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it('send the bearer token and turn a 401 into SignedOutError', async () => {
     const fetch = mockFetch(Response.json({ error: '登录已失效，请重新登录' }, { status: 401 }));
     await expect(checkSession(connection)).rejects.toBeInstanceOf(SignedOutError);

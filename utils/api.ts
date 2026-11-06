@@ -68,6 +68,11 @@ function authorized(connection: Connection, init: RequestInit = {}): RequestInit
 }
 
 async function callAuthorized(connection: Connection, path: string, init: RequestInit = {}) {
+  // Existing self-hosted credentials must not keep a FUJIOKY extension outside
+  // central grant management after upgrading. Other deployments are unchanged.
+  if (isFujiokyUrl(connection.baseUrl) && !connection.token.startsWith('member_reach_')) {
+    throw new SignedOutError();
+  }
   try {
     return await call(connection.baseUrl, path, authorized(connection, init));
   } catch (err) {
